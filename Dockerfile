@@ -4,12 +4,18 @@ LABEL org.opencontainers.image.authors="soulteary@gmail.com"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV WORDPRESS_PREPARE_DIR=/usr/src/wordpress
+ARG WORDPRESS_HTTP_PORT=7860
+ENV WORDPRESS_HTTP_PORT=${WORDPRESS_HTTP_PORT}
 
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends libsqlite3-dev; \
     docker-php-ext-install pdo_sqlite sqlite3; \
+    sed -ri "s!^Listen 80$!Listen ${WORDPRESS_HTTP_PORT}!" /etc/apache2/ports.conf; \
+    sed -ri "s!<VirtualHost \\*:80>!<VirtualHost *:${WORDPRESS_HTTP_PORT}>!" /etc/apache2/sites-available/000-default.conf; \
     rm -rf /var/lib/apt/lists/*
+
+EXPOSE ${WORDPRESS_HTTP_PORT}
 
 # plugin: https://github.com/WordPress/sqlite-database-integration
 ARG SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23
