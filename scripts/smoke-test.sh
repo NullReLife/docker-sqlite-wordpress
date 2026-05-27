@@ -7,7 +7,7 @@ CONTAINER_NAME="sqlite-wordpress-native-parser-smoke-test"
 HOST_PORT="18080"
 CONTAINER_PORT="7860"
 TEST_VOLUME="$(mktemp -d)"
-SQLITE_DATABASE_INTEGRATION_COMMIT="c43113d9e267462a12ecd2b04a73c3b62e5d2c7b"
+SQLITE_DATABASE_INTEGRATION_COMMIT="e5513936c800f14b6795e7fce71505afad331b11"
 
 cleanup() {
   docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
@@ -42,6 +42,7 @@ done
 curl -fsSL "http://127.0.0.1:${HOST_PORT}/wp-admin/install.php" >/dev/null
 
 docker exec "${CONTAINER_NAME}" test -f /var/www/html/wp-content/db.php
+docker exec "${CONTAINER_NAME}" test -f /var/www/html/wp-config.php
 docker exec "${CONTAINER_NAME}" test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
 docker exec "${CONTAINER_NAME}" test -d /var/www/html/wp-content/database
 
