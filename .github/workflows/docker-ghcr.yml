@@ -31,6 +31,7 @@ jobs:
     name: Build ${{ matrix.platform }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    continue-on-error: ${{ matrix.experimental }}
 
     strategy:
       fail-fast: false
@@ -38,10 +39,13 @@ jobs:
         include:
           - platform: linux/amd64
             arch_tag: amd64
+            experimental: false
           - platform: linux/arm64
             arch_tag: arm64
+            experimental: false
           - platform: linux/arm/v7
             arch_tag: armv7
+            experimental: true
 
     steps:
       - name: Checkout
@@ -97,7 +101,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build normal multi-layer image for ${{ matrix.platform }}
+      - name: Build and push normal multi-layer image for ${{ matrix.platform }}
         shell: bash
         run: |
           set -euxo pipefail
@@ -105,20 +109,28 @@ jobs:
           docker buildx build \
             --platform "${{ matrix.platform }}" \
             --pull \
-            --load \
+            --push \
             --build-arg WORDPRESS_IMAGE="${WORDPRESS_IMAGE}" \
             --build-arg SQLITE_DATABASE_INTEGRATION_VERSION="${SQLITE_DATABASE_INTEGRATION_VERSION}" \
             --build-arg SQLITE_DATABASE_INTEGRATION_COMMIT="${SQLITE_DATABASE_INTEGRATION_COMMIT}" \
             --build-arg WORDPRESS_HTTP_PORT="${WORDPRESS_HTTP_PORT}" \
-            -t "local-normal:${{ matrix.arch_tag }}" \
+            -t "${{ steps.meta.outputs.normal_version_arch_ref }}" \
+            -t "${{ steps.meta.outputs.normal_channel_arch_ref }}" \
             .
 
-      - name: Test normal multi-layer image for ${{ matrix.platform }}
+      - name: Pull normal image for flattening
+        shell: bash
+        run: |
+          set -euxo pipefail
+          docker pull --platform "${{ matrix.platform }}" "${{ steps.meta.outputs.normal_version_arch_ref }}"
+
+      - name: Test normal image on amd64
+        if: matrix.arch_tag == 'amd64'
         shell: bash
         run: |
           set -euxo pipefail
 
-          container="wordpress-normal-test-${{ matrix.arch_tag }}-${GITHUB_RUN_ID}"
+          container="wordpress-normal-test-${GITHUB_RUN_ID}"
           volume_dir="$(mktemp -d)"
 
           cleanup() {
@@ -128,11 +140,10 @@ jobs:
           trap cleanup EXIT
 
           docker run -d \
-            --platform "${{ matrix.platform }}" \
             --name "${container}" \
             -p 18080:7860 \
             -v "${volume_dir}:/var/www/html" \
-            "local-normal:${{ matrix.arch_tag }}"
+            "${{ steps.meta.outputs.normal_version_arch_ref }}"
 
           for i in $(seq 1 120); do
             if curl -fsSL http://127.0.0.1:18080/wp-admin/install.php >/dev/null; then
@@ -152,15 +163,6 @@ jobs:
             docker exec "${container}" sh -c "php -m | grep -qx wp_mysql_parser"
           fi
 
-      - name: Push normal multi-layer image for ${{ matrix.platform }}
-        shell: bash
-        run: |
-          set -euxo pipefail
-          docker tag "local-normal:${{ matrix.arch_tag }}" "${{ steps.meta.outputs.normal_version_arch_ref }}"
-          docker tag "local-normal:${{ matrix.arch_tag }}" "${{ steps.meta.outputs.normal_channel_arch_ref }}"
-          docker push "${{ steps.meta.outputs.normal_version_arch_ref }}"
-          docker push "${{ steps.meta.outputs.normal_channel_arch_ref }}"
-
       - name: Flatten image into a single layer for ${{ matrix.platform }}
         shell: bash
         run: |
@@ -178,7 +180,7 @@ jobs:
           docker create \
             --platform "${{ matrix.platform }}" \
             --name "${tmp_container}" \
-            "local-normal:${{ matrix.arch_tag }}"
+            "${{ steps.meta.outputs.normal_version_arch_ref }}"
           docker export "${tmp_container}" -o "${rootfs}"
 
           docker import \
@@ -194,12 +196,13 @@ jobs:
             "${rootfs}" \
             "local-flat:${{ matrix.arch_tag }}"
 
-      - name: Test single-layer image for ${{ matrix.platform }}
+      - name: Test single-layer image on amd64
+        if: matrix.arch_tag == 'amd64'
         shell: bash
         run: |
           set -euxo pipefail
 
-          container="wordpress-flat-test-${{ matrix.arch_tag }}-${GITHUB_RUN_ID}"
+          container="wordpress-flat-test-${GITHUB_RUN_ID}"
           volume_dir="$(mktemp -d)"
 
           cleanup() {
@@ -209,7 +212,6 @@ jobs:
           trap cleanup EXIT
 
           docker run -d \
-            --platform "${{ matrix.platform }}" \
             --name "${container}" \
             -p 18081:7860 \
             -v "${volume_dir}:/var/www/html" \
@@ -289,7 +291,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create and push normal multi-arch manifests
+      - name: Create and push multi-arch manifests
         shell: bash
         run: |
           set -euxo pipefail
@@ -298,38 +300,40 @@ jobs:
           version_tag="${{ steps.meta.outputs.version_tag }}"
           channel_tag="${{ steps.meta.outputs.channel_tag }}"
 
-          docker buildx imagetools create \
-            -t "${image}:${version_tag}" \
-            "${image}:${version_tag}-amd64" \
-            "${image}:${version_tag}-arm64" \
-            "${image}:${version_tag}-armv7"
+          collect_refs() {
+            local base_tag="$1"
+            local refs=()
+            for arch in amd64 arm64 armv7; do
+              local ref="${image}:${base_tag}-${arch}"
+              if docker buildx imagetools inspect "${ref}" >/dev/null 2>&1; then
+                refs+=("${ref}")
+              else
+                echo "Skip missing optional image: ${ref}" >&2
+              fi
+            done
+            printf '%s\n' "${refs[@]}"
+          }
 
-          docker buildx imagetools create \
-            -t "${image}:${channel_tag}" \
-            "${image}:${channel_tag}-amd64" \
-            "${image}:${channel_tag}-arm64" \
-            "${image}:${channel_tag}-armv7"
+          create_manifest() {
+            local target="$1"
+            shift
+            local refs=("$@")
+            if [ "${#refs[@]}" -lt 2 ]; then
+              echo "Not enough architecture images to create ${target}" >&2
+              exit 1
+            fi
+            docker buildx imagetools create -t "${target}" "${refs[@]}"
+          }
 
-      - name: Create and push single-layer multi-arch manifests
-        shell: bash
-        run: |
-          set -euxo pipefail
+          mapfile -t normal_version_refs < <(collect_refs "${version_tag}")
+          mapfile -t normal_channel_refs < <(collect_refs "${channel_tag}")
+          mapfile -t flat_version_refs < <(collect_refs "${version_tag}-flat")
+          mapfile -t flat_channel_refs < <(collect_refs "${channel_tag}-flat")
 
-          image="${{ steps.meta.outputs.image }}"
-          version_tag="${{ steps.meta.outputs.version_tag }}"
-          channel_tag="${{ steps.meta.outputs.channel_tag }}"
-
-          docker buildx imagetools create \
-            -t "${image}:${version_tag}-flat" \
-            "${image}:${version_tag}-flat-amd64" \
-            "${image}:${version_tag}-flat-arm64" \
-            "${image}:${version_tag}-flat-armv7"
-
-          docker buildx imagetools create \
-            -t "${image}:${channel_tag}-flat" \
-            "${image}:${channel_tag}-flat-amd64" \
-            "${image}:${channel_tag}-flat-arm64" \
-            "${image}:${channel_tag}-flat-armv7"
+          create_manifest "${image}:${version_tag}" "${normal_version_refs[@]}"
+          create_manifest "${image}:${channel_tag}" "${normal_channel_refs[@]}"
+          create_manifest "${image}:${version_tag}-flat" "${flat_version_refs[@]}"
+          create_manifest "${image}:${channel_tag}-flat" "${flat_channel_refs[@]}"
 
       - name: Inspect published manifests
         shell: bash
