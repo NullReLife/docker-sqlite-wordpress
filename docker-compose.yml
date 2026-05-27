@@ -1,12 +1,12 @@
-version: '3'
-
 services:
-
   wordpress:
-    image: soulteary/sqlite-wordpress:6.9.1
-    # or use: ghcr.io/soulteary/sqlite-wordpress:6.9.1
+    build:
+      context: .
+      args:
+        WORDPRESS_IMAGE: wordpress:7.0.0-php8.5-apache
+        SQLITE_DATABASE_INTEGRATION_VERSION: 2.2.23
     restart: always
     ports:
-      - 8080:80
+      - "8080:80"
     volumes:
       - ./wordpress:/var/www/html
