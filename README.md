@@ -14,6 +14,7 @@
 - PHP: 8.5
 - SQLite Database Integration: 2.2.23
 - 基础镜像：`wordpress:7.0.0-php8.5-apache`
+- 容器监听端口：7860
 
 所有版本都已固定，便于可复现构建。本项目不会使用 `wordpress:latest`、浮动 WordPress 标签或 SQLite Database Integration 的 RC 候选版本。
 
@@ -25,6 +26,7 @@
 docker build \
   --build-arg WORDPRESS_IMAGE=wordpress:7.0.0-php8.5-apache \
   --build-arg SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23 \
+  --build-arg WORDPRESS_HTTP_PORT=7860 \
   -t sqlite-wordpress:7.0.0-php8.5-apache-sqlite-2.2.23 \
   .
 ```
@@ -40,7 +42,7 @@ docker compose up -d
 然后在浏览器中打开：
 
 ```text
-http://localhost:8080
+http://localhost:7860
 ```
 
 你应该可以看到 WordPress 安装页面。
@@ -79,22 +81,23 @@ services:
       args:
         WORDPRESS_IMAGE: wordpress:7.0.0-php8.5-apache
         SQLITE_DATABASE_INTEGRATION_VERSION: 2.2.23
+        WORDPRESS_HTTP_PORT: 7860
     restart: always
     ports:
-      - "8080:80"
+      - "7860:7860"
     volumes:
       - ./wordpress:/var/www/html
 ```
 
-## 冒烟测试
+## 快速自检
 
-修改后可以运行冒烟测试：
+修改镜像或配置后，可以运行快速自检脚本确认基础功能是否正常：
 
 ```bash
 bash scripts/smoke-test.sh
 ```
 
-该测试会构建镜像，在 `127.0.0.1:18080` 启动一个临时容器，检查 `wp-admin/install.php` 是否可访问，验证 SQLite 集成文件和数据库目录是否存在，确认 PHP 已启用 SQLite 支持，并在测试结束后自动删除测试容器。
+这个脚本会自动构建镜像，并在本机 `127.0.0.1:18080` 启动一个临时测试容器。容器内部的 WordPress 服务监听 `7860` 端口，脚本会检查 WordPress 安装页面是否可以访问，确认 SQLite 集成文件和数据库目录是否存在，确认 PHP 已启用 SQLite 支持。测试结束后，临时容器会被自动删除。
 
 ## 相关文章
 
