@@ -59,6 +59,8 @@ RUN set -eux; \
     cp /tmp/libwp_mysql_parser.so "${extension_dir}/wp_mysql_parser.so"; \
     echo 'extension=wp_mysql_parser.so' > /usr/local/etc/php/conf.d/docker-php-ext-wp-mysql-parser.ini; \
     php -m | grep -qx wp_mysql_parser; \
+    test -f "${WP_PREPARE_DIR}/wp-config-docker.php"; \
+    cp "${WP_PREPARE_DIR}/wp-config-docker.php" "${WP_PREPARE_DIR}/wp-config.php"; \
     mkdir -p "${WP_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration"; \
     cp -r /tmp/sqlite-database-integration/. "${WP_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration/"; \
     rm -rf /tmp/libwp_mysql_parser.so /tmp/sqlite-database-integration; \
