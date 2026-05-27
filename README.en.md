@@ -91,13 +91,23 @@ services:
 
 ## Self-check
 
-After changing the image or configuration, run the self-check script to verify the basic runtime behavior:
+After changing the image or configuration, run the self-check script to verify the basic runtime behavior.
+
+On Linux, macOS, or WSL, run:
 
 ```bash
 bash scripts/smoke-test.sh
 ```
 
+On Windows PowerShell, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
+```
+
 The script builds the image and starts a temporary test container on `127.0.0.1:18080`. Inside the container, WordPress listens on port `7860`. The script checks that the WordPress installation page is reachable, verifies the SQLite integration files and database directory, confirms PHP has SQLite support, and removes the temporary container automatically when finished.
+
+If you see an error like `/bin/bash: No such file or directory` in Windows `cmd` or PowerShell, it means Bash is not available in the current environment. Use the PowerShell self-check command above, or run the Bash script inside WSL.
 
 ## Articles
 
