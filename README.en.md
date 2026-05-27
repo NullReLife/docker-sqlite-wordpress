@@ -14,6 +14,7 @@ This image is based on the official WordPress Docker image and installs the Word
 - PHP: 8.5
 - SQLite Database Integration: 2.2.23
 - Base image: `wordpress:7.0.0-php8.5-apache`
+- Container listen port: 7860
 
 All versions are pinned for reproducible builds. This project does not use `wordpress:latest`, floating WordPress tags, or SQLite Database Integration release candidates.
 
@@ -25,6 +26,7 @@ Build the Docker image locally:
 docker build \
   --build-arg WORDPRESS_IMAGE=wordpress:7.0.0-php8.5-apache \
   --build-arg SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23 \
+  --build-arg WORDPRESS_HTTP_PORT=7860 \
   -t sqlite-wordpress:7.0.0-php8.5-apache-sqlite-2.2.23 \
   .
 ```
@@ -40,7 +42,7 @@ docker compose up -d
 Then open:
 
 ```text
-http://localhost:8080
+http://localhost:7860
 ```
 
 The WordPress installation page should appear.
@@ -79,22 +81,23 @@ services:
       args:
         WORDPRESS_IMAGE: wordpress:7.0.0-php8.5-apache
         SQLITE_DATABASE_INTEGRATION_VERSION: 2.2.23
+        WORDPRESS_HTTP_PORT: 7860
     restart: always
     ports:
-      - "8080:80"
+      - "7860:7860"
     volumes:
       - ./wordpress:/var/www/html
 ```
 
-## Smoke Test
+## Self-check
 
-Run the smoke test after making changes:
+After changing the image or configuration, run the self-check script to verify the basic runtime behavior:
 
 ```bash
 bash scripts/smoke-test.sh
 ```
 
-The test builds the image, starts a temporary container on `127.0.0.1:18080`, checks that `wp-admin/install.php` is reachable, verifies the SQLite integration files and database directory, confirms PHP has SQLite support, and removes the test container automatically.
+The script builds the image and starts a temporary test container on `127.0.0.1:18080`. Inside the container, WordPress listens on port `7860`. The script checks that the WordPress installation page is reachable, verifies the SQLite integration files and database directory, confirms PHP has SQLite support, and removes the temporary container automatically when finished.
 
 ## Articles
 
