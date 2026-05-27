@@ -1,11 +1,12 @@
 $ErrorActionPreference = 'Stop'
 
 $RootDir = Resolve-Path (Join-Path $PSScriptRoot '..')
-$ImageName = 'sqlite-wordpress-smoke:local'
-$ContainerName = 'sqlite-wordpress-smoke-test'
+$ImageName = 'sqlite-wordpress-native-parser-smoke:local'
+$ContainerName = 'sqlite-wordpress-native-parser-smoke-test'
 $HostPort = '18080'
 $ContainerPort = '7860'
-$TestVolume = Join-Path ([System.IO.Path]::GetTempPath()) ("sqlite-wordpress-smoke-" + [System.Guid]::NewGuid().ToString('N'))
+$SQLiteDatabaseIntegrationCommit = 'c43113d9e267462a12ecd2b04a73c3b62e5d2c7b'
+$TestVolume = Join-Path ([System.IO.Path]::GetTempPath()) ("sqlite-wordpress-native-parser-smoke-" + [System.Guid]::NewGuid().ToString('N'))
 
 New-Item -ItemType Directory -Path $TestVolume | Out-Null
 
@@ -19,7 +20,7 @@ try {
 
     docker build `
         --build-arg WORDPRESS_IMAGE=wordpress:7.0.0-php8.5-apache `
-        --build-arg SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23 `
+        --build-arg SQLITE_DATABASE_INTEGRATION_COMMIT=$SQLiteDatabaseIntegrationCommit `
         --build-arg WORDPRESS_HTTP_PORT=$ContainerPort `
         -t $ImageName `
         .
@@ -51,8 +52,9 @@ try {
     docker exec $ContainerName test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
     docker exec $ContainerName test -d /var/www/html/wp-content/database
     docker exec $ContainerName sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
+    docker exec $ContainerName sh -c "php -m | grep -qx wp_mysql_parser"
 
-    Write-Host 'Self-check passed.'
+    Write-Host 'Native parser self-check passed.'
 } finally {
     Cleanup
 }
