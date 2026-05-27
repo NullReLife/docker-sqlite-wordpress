@@ -5,7 +5,7 @@ $ImageName = 'sqlite-wordpress-native-parser-smoke:local'
 $ContainerName = 'sqlite-wordpress-native-parser-smoke-test'
 $HostPort = '18080'
 $ContainerPort = '7860'
-$SQLiteDatabaseIntegrationCommit = 'c43113d9e267462a12ecd2b04a73c3b62e5d2c7b'
+$SQLiteDatabaseIntegrationCommit = 'e5513936c800f14b6795e7fce71505afad331b11'
 $TestVolume = Join-Path ([System.IO.Path]::GetTempPath()) ("sqlite-wordpress-native-parser-smoke-" + [System.Guid]::NewGuid().ToString('N'))
 
 New-Item -ItemType Directory -Path $TestVolume | Out-Null
@@ -49,6 +49,7 @@ try {
     }
 
     docker exec $ContainerName test -f /var/www/html/wp-content/db.php
+    docker exec $ContainerName test -f /var/www/html/wp-config.php
     docker exec $ContainerName test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
     docker exec $ContainerName test -d /var/www/html/wp-content/database
     docker exec $ContainerName sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
