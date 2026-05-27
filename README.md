@@ -1,23 +1,25 @@
 # Docker SQLite WordPress
 
+简体中文 | [English](README.en.md)
+
 ![](.github/about.jpg)
 
-WordPress + SQLite Database Integration, ready to run without MySQL, MariaDB, or PostgreSQL.
+这是一个 WordPress + SQLite Database Integration 镜像，可以在不依赖 MySQL、MariaDB 或 PostgreSQL 的情况下运行 WordPress。
 
-This image is based on the official WordPress Docker image and installs the WordPress SQLite Database Integration plugin as an MU plugin. The SQLite drop-in is copied to `wp-content/db.php`, and WordPress stores its database in a SQLite file.
+该镜像基于官方 WordPress Docker 镜像构建，并将 WordPress SQLite Database Integration 插件安装为 MU 插件。SQLite drop-in 文件会被复制为 `wp-content/db.php`，WordPress 会将数据库保存为 SQLite 文件。
 
-## Versions
+## 版本
 
 - WordPress: 7.0.0
 - PHP: 8.5
 - SQLite Database Integration: 2.2.23
-- Base image: `wordpress:7.0.0-php8.5-apache`
+- 基础镜像：`wordpress:7.0.0-php8.5-apache`
 
-All versions are pinned for reproducible builds. This project does not use `wordpress:latest`, floating WordPress tags, or SQLite Database Integration release candidates.
+所有版本都已固定，便于可复现构建。本项目不会使用 `wordpress:latest`、浮动 WordPress 标签或 SQLite Database Integration 的 RC 候选版本。
 
-## Build
+## 构建
 
-Build the Docker image locally:
+在本地构建 Docker 镜像：
 
 ```bash
 docker build \
@@ -27,47 +29,47 @@ docker build \
   .
 ```
 
-## Run with Docker Compose
+## 使用 Docker Compose 启动
 
-Start WordPress:
+启动 WordPress：
 
 ```bash
 docker compose up -d
 ```
 
-Then open:
+然后在浏览器中打开：
 
 ```text
 http://localhost:8080
 ```
 
-The WordPress installation page should appear.
+你应该可以看到 WordPress 安装页面。
 
-## Data Directory
+## 数据目录
 
-Runtime WordPress files are stored in:
+运行时的 WordPress 文件保存在：
 
 ```text
 ./wordpress
 ```
 
-The SQLite database file is stored inside the WordPress data directory at:
+SQLite 数据库文件位于 WordPress 数据目录中的：
 
 ```text
 wp-content/database/.ht.sqlite
 ```
 
-With the default Compose volume, that resolves to:
+使用默认 Compose 挂载时，对应宿主机路径为：
 
 ```text
 ./wordpress/wp-content/database/.ht.sqlite
 ```
 
-Before upgrading this image or changing plugin versions, always back up the full `./wordpress` directory.
+升级该镜像或修改插件版本前，请务必先备份完整的 `./wordpress` 目录。
 
-## Docker Compose Configuration
+## Docker Compose 配置
 
-The project uses a single `wordpress` service and does not require a separate database container:
+本项目只使用一个 `wordpress` 服务，不需要额外的数据库容器：
 
 ```yaml
 services:
@@ -84,17 +86,17 @@ services:
       - ./wordpress:/var/www/html
 ```
 
-## Smoke Test
+## 冒烟测试
 
-Run the smoke test after making changes:
+修改后可以运行冒烟测试：
 
 ```bash
 bash scripts/smoke-test.sh
 ```
 
-The test builds the image, starts a temporary container on `127.0.0.1:18080`, checks that `wp-admin/install.php` is reachable, verifies the SQLite integration files and database directory, confirms PHP has SQLite support, and removes the test container automatically.
+该测试会构建镜像，在 `127.0.0.1:18080` 启动一个临时容器，检查 `wp-admin/install.php` 是否可访问，验证 SQLite 集成文件和数据库目录是否存在，确认 PHP 已启用 SQLite 支持，并在测试结束后自动删除测试容器。
 
-## Articles
+## 相关文章
 
 - [WordPress SQLite Docker image packaging details](https://soulteary.com/2024/04/21/wordpress-sqlite-docker-image-packaging-details.html)
 - [WordPress farewell to MySQL: Docker SQLite WordPress](https://soulteary.com/2024/04/17/say-goodbye-to-mysql-docker-sqlite-wordpress.html)
