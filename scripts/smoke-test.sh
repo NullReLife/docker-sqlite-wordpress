@@ -2,11 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE_NAME="sqlite-wordpress-smoke:local"
-CONTAINER_NAME="sqlite-wordpress-smoke-test"
+IMAGE_NAME="sqlite-wordpress-native-parser-smoke:local"
+CONTAINER_NAME="sqlite-wordpress-native-parser-smoke-test"
 HOST_PORT="18080"
 CONTAINER_PORT="7860"
 TEST_VOLUME="$(mktemp -d)"
+SQLITE_DATABASE_INTEGRATION_COMMIT="c43113d9e267462a12ecd2b04a73c3b62e5d2c7b"
 
 cleanup() {
   docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
@@ -18,7 +19,7 @@ cd "${ROOT_DIR}"
 
 docker build \
   --build-arg WORDPRESS_IMAGE=wordpress:7.0.0-php8.5-apache \
-  --build-arg SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23 \
+  --build-arg SQLITE_DATABASE_INTEGRATION_COMMIT="${SQLITE_DATABASE_INTEGRATION_COMMIT}" \
   --build-arg WORDPRESS_HTTP_PORT="${CONTAINER_PORT}" \
   -t "${IMAGE_NAME}" \
   .
@@ -45,5 +46,6 @@ docker exec "${CONTAINER_NAME}" test -d /var/www/html/wp-content/mu-plugins/sqli
 docker exec "${CONTAINER_NAME}" test -d /var/www/html/wp-content/database
 
 docker exec "${CONTAINER_NAME}" sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
+docker exec "${CONTAINER_NAME}" sh -c "php -m | grep -qx wp_mysql_parser"
 
-echo "Self-check passed."
+echo "Native parser self-check passed."
