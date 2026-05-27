@@ -20,21 +20,237 @@ concurrency:
   group: docker-ghcr-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  build-publish:
-    name: Build, flatten, and publish
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+env:
+  WORDPRESS_IMAGE: wordpress:7.0.0-php8.5-apache
+  WORDPRESS_HTTP_PORT: "7860"
+  SQLITE_DATABASE_INTEGRATION_VERSION: "2.2.23"
+  SQLITE_DATABASE_INTEGRATION_COMMIT: e5513936c800f14b6795e7fce71505afad331b11
 
-    env:
-      WORDPRESS_IMAGE: wordpress:7.0.0-php8.5-apache
-      WORDPRESS_HTTP_PORT: "7860"
-      SQLITE_DATABASE_INTEGRATION_VERSION: "2.2.23"
-      SQLITE_DATABASE_INTEGRATION_COMMIT: e5513936c800f14b6795e7fce71505afad331b11
+jobs:
+  build-platform:
+    name: Build ${{ matrix.platform }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch_tag: amd64
+          - platform: linux/arm64
+            arch_tag: arm64
+          - platform: linux/arm/v7
+            arch_tag: armv7
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve image metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          branch="${GITHUB_REF_NAME}"
+          arch="${{ matrix.arch_tag }}"
+
+          case "${branch}" in
+            main)
+              version_tag="7.0.0-php8.5-apache-sqlite-2.2.23"
+              channel_tag="main"
+              ;;
+            native-parser)
+              version_tag="7.0.0-php8.5-apache-native-parser"
+              channel_tag="native-parser"
+              ;;
+            *)
+              echo "Unsupported branch: ${branch}" >&2
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "image=${image}"
+            echo "version_tag=${version_tag}"
+            echo "channel_tag=${channel_tag}"
+            echo "normal_version_arch_ref=${image}:${version_tag}-${arch}"
+            echo "normal_channel_arch_ref=${image}:${channel_tag}-${arch}"
+            echo "flat_version_arch_ref=${image}:${version_tag}-flat-${arch}"
+            echo "flat_channel_arch_ref=${image}:${channel_tag}-flat-${arch}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build normal multi-layer image for ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          docker buildx build \
+            --platform "${{ matrix.platform }}" \
+            --pull \
+            --load \
+            --build-arg WORDPRESS_IMAGE="${WORDPRESS_IMAGE}" \
+            --build-arg SQLITE_DATABASE_INTEGRATION_VERSION="${SQLITE_DATABASE_INTEGRATION_VERSION}" \
+            --build-arg SQLITE_DATABASE_INTEGRATION_COMMIT="${SQLITE_DATABASE_INTEGRATION_COMMIT}" \
+            --build-arg WORDPRESS_HTTP_PORT="${WORDPRESS_HTTP_PORT}" \
+            -t "local-normal:${{ matrix.arch_tag }}" \
+            .
+
+      - name: Test normal multi-layer image for ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          container="wordpress-normal-test-${{ matrix.arch_tag }}-${GITHUB_RUN_ID}"
+          volume_dir="$(mktemp -d)"
+
+          cleanup() {
+            docker rm -f "${container}" >/dev/null 2>&1 || true
+            rm -rf "${volume_dir}"
+          }
+          trap cleanup EXIT
+
+          docker run -d \
+            --platform "${{ matrix.platform }}" \
+            --name "${container}" \
+            -p 18080:7860 \
+            -v "${volume_dir}:/var/www/html" \
+            "local-normal:${{ matrix.arch_tag }}"
+
+          for i in $(seq 1 120); do
+            if curl -fsSL http://127.0.0.1:18080/wp-admin/install.php >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          curl -fsSL http://127.0.0.1:18080/wp-admin/install.php >/dev/null
+          docker exec "${container}" test -f /var/www/html/wp-config.php
+          docker exec "${container}" test -f /var/www/html/wp-content/db.php
+          docker exec "${container}" test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
+          docker exec "${container}" test -d /var/www/html/wp-content/database
+          docker exec "${container}" sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
+
+          if [ "${GITHUB_REF_NAME}" = "native-parser" ]; then
+            docker exec "${container}" sh -c "php -m | grep -qx wp_mysql_parser"
+          fi
+
+      - name: Push normal multi-layer image for ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          docker tag "local-normal:${{ matrix.arch_tag }}" "${{ steps.meta.outputs.normal_version_arch_ref }}"
+          docker tag "local-normal:${{ matrix.arch_tag }}" "${{ steps.meta.outputs.normal_channel_arch_ref }}"
+          docker push "${{ steps.meta.outputs.normal_version_arch_ref }}"
+          docker push "${{ steps.meta.outputs.normal_channel_arch_ref }}"
+
+      - name: Flatten image into a single layer for ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          tmp_container="wordpress-flatten-${{ matrix.arch_tag }}-${GITHUB_RUN_ID}"
+          rootfs="$(mktemp --suffix=.tar)"
+
+          cleanup() {
+            docker rm -f "${tmp_container}" >/dev/null 2>&1 || true
+            rm -f "${rootfs}"
+          }
+          trap cleanup EXIT
+
+          docker create \
+            --platform "${{ matrix.platform }}" \
+            --name "${tmp_container}" \
+            "local-normal:${{ matrix.arch_tag }}"
+          docker export "${tmp_container}" -o "${rootfs}"
+
+          docker import \
+            --platform "${{ matrix.platform }}" \
+            --change 'ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
+            --change 'ENV PHP_INI_DIR=/usr/local/etc/php' \
+            --change 'ENV APACHE_CONFDIR=/etc/apache2' \
+            --change 'ENV APACHE_ENVVARS=/etc/apache2/envvars' \
+            --change 'WORKDIR /var/www/html' \
+            --change 'ENTRYPOINT ["docker-entrypoint.sh"]' \
+            --change 'CMD ["apache2-foreground"]' \
+            --change 'EXPOSE 7860' \
+            "${rootfs}" \
+            "local-flat:${{ matrix.arch_tag }}"
+
+      - name: Test single-layer image for ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          container="wordpress-flat-test-${{ matrix.arch_tag }}-${GITHUB_RUN_ID}"
+          volume_dir="$(mktemp -d)"
+
+          cleanup() {
+            docker rm -f "${container}" >/dev/null 2>&1 || true
+            rm -rf "${volume_dir}"
+          }
+          trap cleanup EXIT
+
+          docker run -d \
+            --platform "${{ matrix.platform }}" \
+            --name "${container}" \
+            -p 18081:7860 \
+            -v "${volume_dir}:/var/www/html" \
+            "local-flat:${{ matrix.arch_tag }}"
+
+          for i in $(seq 1 120); do
+            if curl -fsSL http://127.0.0.1:18081/wp-admin/install.php >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          curl -fsSL http://127.0.0.1:18081/wp-admin/install.php >/dev/null
+          docker exec "${container}" test -f /var/www/html/wp-config.php
+          docker exec "${container}" test -f /var/www/html/wp-content/db.php
+          docker exec "${container}" test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
+          docker exec "${container}" test -d /var/www/html/wp-content/database
+          docker exec "${container}" sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
+
+          if [ "${GITHUB_REF_NAME}" = "native-parser" ]; then
+            docker exec "${container}" sh -c "php -m | grep -qx wp_mysql_parser"
+          fi
+
+      - name: Push single-layer image for ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          docker tag "local-flat:${{ matrix.arch_tag }}" "${{ steps.meta.outputs.flat_version_arch_ref }}"
+          docker tag "local-flat:${{ matrix.arch_tag }}" "${{ steps.meta.outputs.flat_channel_arch_ref }}"
+          docker push "${{ steps.meta.outputs.flat_version_arch_ref }}"
+          docker push "${{ steps.meta.outputs.flat_channel_arch_ref }}"
+
+  publish-manifests:
+    name: Publish multi-arch manifests
+    runs-on: ubuntu-latest
+    needs: build-platform
+    timeout-minutes: 30
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Resolve image metadata
         id: meta
@@ -64,10 +280,6 @@ jobs:
             echo "image=${image}"
             echo "version_tag=${version_tag}"
             echo "channel_tag=${channel_tag}"
-            echo "normal_version_ref=${image}:${version_tag}"
-            echo "normal_channel_ref=${image}:${channel_tag}"
-            echo "flat_version_ref=${image}:${version_tag}-flat"
-            echo "flat_channel_ref=${image}:${channel_tag}-flat"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Log in to GHCR
@@ -77,148 +289,71 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build normal multi-layer image
+      - name: Create and push normal multi-arch manifests
         shell: bash
         run: |
           set -euxo pipefail
 
-          docker build \
-            --pull \
-            --build-arg WORDPRESS_IMAGE="${WORDPRESS_IMAGE}" \
-            --build-arg SQLITE_DATABASE_INTEGRATION_VERSION="${SQLITE_DATABASE_INTEGRATION_VERSION}" \
-            --build-arg SQLITE_DATABASE_INTEGRATION_COMMIT="${SQLITE_DATABASE_INTEGRATION_COMMIT}" \
-            --build-arg WORDPRESS_HTTP_PORT="${WORDPRESS_HTTP_PORT}" \
-            -t "${{ steps.meta.outputs.normal_version_ref }}" \
-            -t "${{ steps.meta.outputs.normal_channel_ref }}" \
-            .
+          image="${{ steps.meta.outputs.image }}"
+          version_tag="${{ steps.meta.outputs.version_tag }}"
+          channel_tag="${{ steps.meta.outputs.channel_tag }}"
 
-      - name: Test normal multi-layer image
+          docker buildx imagetools create \
+            -t "${image}:${version_tag}" \
+            "${image}:${version_tag}-amd64" \
+            "${image}:${version_tag}-arm64" \
+            "${image}:${version_tag}-armv7"
+
+          docker buildx imagetools create \
+            -t "${image}:${channel_tag}" \
+            "${image}:${channel_tag}-amd64" \
+            "${image}:${channel_tag}-arm64" \
+            "${image}:${channel_tag}-armv7"
+
+      - name: Create and push single-layer multi-arch manifests
         shell: bash
         run: |
           set -euxo pipefail
 
-          container="wordpress-normal-test-${GITHUB_RUN_ID}"
-          volume_dir="$(mktemp -d)"
+          image="${{ steps.meta.outputs.image }}"
+          version_tag="${{ steps.meta.outputs.version_tag }}"
+          channel_tag="${{ steps.meta.outputs.channel_tag }}"
 
-          cleanup() {
-            docker rm -f "${container}" >/dev/null 2>&1 || true
-            rm -rf "${volume_dir}"
-          }
-          trap cleanup EXIT
+          docker buildx imagetools create \
+            -t "${image}:${version_tag}-flat" \
+            "${image}:${version_tag}-flat-amd64" \
+            "${image}:${version_tag}-flat-arm64" \
+            "${image}:${version_tag}-flat-armv7"
 
-          docker run -d \
-            --name "${container}" \
-            -p 18080:7860 \
-            -v "${volume_dir}:/var/www/html" \
-            "${{ steps.meta.outputs.normal_version_ref }}"
+          docker buildx imagetools create \
+            -t "${image}:${channel_tag}-flat" \
+            "${image}:${channel_tag}-flat-amd64" \
+            "${image}:${channel_tag}-flat-arm64" \
+            "${image}:${channel_tag}-flat-armv7"
 
-          for i in $(seq 1 90); do
-            if curl -fsSL http://127.0.0.1:18080/wp-admin/install.php >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          curl -fsSL http://127.0.0.1:18080/wp-admin/install.php >/dev/null
-          docker exec "${container}" test -f /var/www/html/wp-config.php
-          docker exec "${container}" test -f /var/www/html/wp-content/db.php
-          docker exec "${container}" test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
-          docker exec "${container}" test -d /var/www/html/wp-content/database
-          docker exec "${container}" sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
-
-          if [ "${GITHUB_REF_NAME}" = "native-parser" ]; then
-            docker exec "${container}" sh -c "php -m | grep -qx wp_mysql_parser"
-          fi
-
-      - name: Push normal multi-layer image
-        shell: bash
-        run: |
-          set -euxo pipefail
-          docker push "${{ steps.meta.outputs.normal_version_ref }}"
-          docker push "${{ steps.meta.outputs.normal_channel_ref }}"
-
-      - name: Flatten image into a single layer
+      - name: Inspect published manifests
         shell: bash
         run: |
           set -euxo pipefail
 
-          tmp_container="wordpress-flatten-${GITHUB_RUN_ID}"
-          rootfs="$(mktemp --suffix=.tar)"
+          image="${{ steps.meta.outputs.image }}"
+          version_tag="${{ steps.meta.outputs.version_tag }}"
+          channel_tag="${{ steps.meta.outputs.channel_tag }}"
 
-          cleanup() {
-            docker rm -f "${tmp_container}" >/dev/null 2>&1 || true
-            rm -f "${rootfs}"
-          }
-          trap cleanup EXIT
+          docker buildx imagetools inspect "${image}:${version_tag}"
+          docker buildx imagetools inspect "${image}:${version_tag}-flat"
+          docker buildx imagetools inspect "${image}:${channel_tag}"
+          docker buildx imagetools inspect "${image}:${channel_tag}-flat"
 
-          docker create --name "${tmp_container}" "${{ steps.meta.outputs.normal_version_ref }}"
-          docker export "${tmp_container}" -o "${rootfs}"
-
-          docker import \
-            --change 'ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
-            --change 'WORKDIR /var/www/html' \
-            --change 'ENTRYPOINT ["docker-entrypoint.sh"]' \
-            --change 'CMD ["apache2-foreground"]' \
-            --change 'EXPOSE 7860' \
-            "${rootfs}" \
-            "${{ steps.meta.outputs.flat_version_ref }}"
-
-          docker tag "${{ steps.meta.outputs.flat_version_ref }}" "${{ steps.meta.outputs.flat_channel_ref }}"
-
-      - name: Test single-layer image
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          container="wordpress-flat-test-${GITHUB_RUN_ID}"
-          volume_dir="$(mktemp -d)"
-
-          cleanup() {
-            docker rm -f "${container}" >/dev/null 2>&1 || true
-            rm -rf "${volume_dir}"
-          }
-          trap cleanup EXIT
-
-          docker run -d \
-            --name "${container}" \
-            -p 18081:7860 \
-            -v "${volume_dir}:/var/www/html" \
-            "${{ steps.meta.outputs.flat_version_ref }}"
-
-          for i in $(seq 1 90); do
-            if curl -fsSL http://127.0.0.1:18081/wp-admin/install.php >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          curl -fsSL http://127.0.0.1:18081/wp-admin/install.php >/dev/null
-          docker exec "${container}" test -f /var/www/html/wp-config.php
-          docker exec "${container}" test -f /var/www/html/wp-content/db.php
-          docker exec "${container}" test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
-          docker exec "${container}" test -d /var/www/html/wp-content/database
-          docker exec "${container}" sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
-
-          if [ "${GITHUB_REF_NAME}" = "native-parser" ]; then
-            docker exec "${container}" sh -c "php -m | grep -qx wp_mysql_parser"
-          fi
-
-      - name: Push single-layer image
-        shell: bash
-        run: |
-          set -euxo pipefail
-          docker push "${{ steps.meta.outputs.flat_version_ref }}"
-          docker push "${{ steps.meta.outputs.flat_channel_ref }}"
-
-      - name: Show published image refs
-        shell: bash
-        run: |
           cat <<EOF
           Published normal multi-layer images:
-            ${{ steps.meta.outputs.normal_version_ref }}
-            ${{ steps.meta.outputs.normal_channel_ref }}
+            ${image}:${version_tag}
+            ${image}:${channel_tag}
 
           Published single-layer images:
-            ${{ steps.meta.outputs.flat_version_ref }}
-            ${{ steps.meta.outputs.flat_channel_ref }}
+            ${image}:${version_tag}-flat
+            ${image}:${channel_tag}-flat
+
+          Per-architecture tags are also available with suffixes:
+            -amd64, -arm64, -armv7
           EOF
