@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+IMAGE_NAME="sqlite-wordpress-smoke:local"
+CONTAINER_NAME="sqlite-wordpress-smoke-test"
+HOST_PORT="18080"
+CONTAINER_PORT="80"
+TEST_VOLUME="$(mktemp -d)"
+
+cleanup() {
+  docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+  rm -rf "${TEST_VOLUME}"
+}
+trap cleanup EXIT
+
+cd "${ROOT_DIR}"
+
+docker build \
+  --build-arg WORDPRESS_IMAGE=wordpress:7.0.0-php8.5-apache \
+  --build-arg SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23 \
+  -t "${IMAGE_NAME}" \
+  .
+
+docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+
+docker run -d \
+  --name "${CONTAINER_NAME}" \
+  -p "${HOST_PORT}:${CONTAINER_PORT}" \
+  -v "${TEST_VOLUME}:/var/www/html" \
+  "${IMAGE_NAME}" >/dev/null
+
+for _ in $(seq 1 60); do
+  if curl -fsSL "http://127.0.0.1:${HOST_PORT}/wp-admin/install.php" >/dev/null; then
+    break
+  fi
+  sleep 1
+done
+
+curl -fsSL "http://127.0.0.1:${HOST_PORT}/wp-admin/install.php" >/dev/null
+
+docker exec "${CONTAINER_NAME}" test -f /var/www/html/wp-content/db.php
+docker exec "${CONTAINER_NAME}" test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
+docker exec "${CONTAINER_NAME}" test -d /var/www/html/wp-content/database
+
+docker exec "${CONTAINER_NAME}" sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
+
+echo "Smoke test passed."
