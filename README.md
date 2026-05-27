@@ -91,13 +91,23 @@ services:
 
 ## 快速自检
 
-修改镜像或配置后，可以运行快速自检脚本确认基础功能是否正常：
+修改镜像或配置后，可以运行快速自检脚本确认基础功能是否正常。
+
+在 Linux、macOS 或 WSL 中运行：
 
 ```bash
 bash scripts/smoke-test.sh
 ```
 
+在 Windows PowerShell 中运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
+```
+
 这个脚本会自动构建镜像，并在本机 `127.0.0.1:18080` 启动一个临时测试容器。容器内部的 WordPress 服务监听 `7860` 端口，脚本会检查 WordPress 安装页面是否可以访问，确认 SQLite 集成文件和数据库目录是否存在，确认 PHP 已启用 SQLite 支持。测试结束后，临时容器会被自动删除。
+
+如果你在 Windows 的 `cmd` 或 PowerShell 中看到类似 `/bin/bash: No such file or directory` 的错误，说明当前环境没有可用的 Bash。请改用上面的 PowerShell 自检命令，或者在 WSL 里运行 Bash 版脚本。
 
 ## 相关文章
 
