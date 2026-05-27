@@ -8,12 +8,9 @@ ARG WORDPRESS_HTTP_PORT=7860
 ENV WORDPRESS_HTTP_PORT=${WORDPRESS_HTTP_PORT}
 
 RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends libsqlite3-dev; \
-    docker-php-ext-install pdo_sqlite sqlite3; \
     sed -ri "s!^Listen 80$!Listen ${WORDPRESS_HTTP_PORT}!" /etc/apache2/ports.conf; \
     sed -ri "s!<VirtualHost \\*:80>!<VirtualHost *:${WORDPRESS_HTTP_PORT}>!" /etc/apache2/sites-available/000-default.conf; \
-    rm -rf /var/lib/apt/lists/*
+    php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'
 
 EXPOSE ${WORDPRESS_HTTP_PORT}
 
