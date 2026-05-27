@@ -20,13 +20,13 @@ ARG SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23
 RUN set -eux; \
     curl -fsSL -o sqlite-database-integration.tar.gz "https://github.com/WordPress/sqlite-database-integration/archive/refs/tags/v${SQLITE_DATABASE_INTEGRATION_VERSION}.tar.gz"; \
     tar -xzf sqlite-database-integration.tar.gz; \
-    plugin_source_dir="sqlite-database-integration-${SQLITE_DATABASE_INTEGRATION_VERSION}/packages/plugin-sqlite-database-integration"; \
-    if [ ! -d "${plugin_source_dir}" ]; then \
-        plugin_source_dir="sqlite-database-integration-${SQLITE_DATABASE_INTEGRATION_VERSION}"; \
-    fi; \
+    extracted_dir="$(find . -maxdepth 1 -type d -name 'sqlite-database-integration-*' -print -quit)"; \
+    db_copy_path="$(find "${extracted_dir}" -type f -name db.copy -print -quit)"; \
+    test -n "${db_copy_path}"; \
+    plugin_source_dir="$(dirname "${db_copy_path}")"; \
     mkdir -p "${WORDPRESS_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration"; \
     cp -r "${plugin_source_dir}/." "${WORDPRESS_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration/"; \
-    rm -rf "sqlite-database-integration-${SQLITE_DATABASE_INTEGRATION_VERSION}" sqlite-database-integration.tar.gz; \
+    rm -rf "${extracted_dir}" sqlite-database-integration.tar.gz; \
     mv "${WORDPRESS_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration/db.copy" "${WORDPRESS_PREPARE_DIR}/wp-content/db.php"; \
     sed -i 's#{SQLITE_IMPLEMENTATION_FOLDER_PATH}#/var/www/html/wp-content/mu-plugins/sqlite-database-integration#' "${WORDPRESS_PREPARE_DIR}/wp-content/db.php"; \
     sed -i 's#{SQLITE_PLUGIN}#sqlite-database-integration/load.php#' "${WORDPRESS_PREPARE_DIR}/wp-content/db.php"; \
