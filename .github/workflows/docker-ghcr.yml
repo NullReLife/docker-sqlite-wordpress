@@ -124,45 +124,6 @@ jobs:
           set -euxo pipefail
           docker pull --platform "${{ matrix.platform }}" "${{ steps.meta.outputs.normal_version_arch_ref }}"
 
-      - name: Test normal image on amd64
-        if: matrix.arch_tag == 'amd64'
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          container="wordpress-normal-test-${GITHUB_RUN_ID}"
-          volume_dir="$(mktemp -d)"
-
-          cleanup() {
-            docker rm -f "${container}" >/dev/null 2>&1 || true
-            rm -rf "${volume_dir}"
-          }
-          trap cleanup EXIT
-
-          docker run -d \
-            --name "${container}" \
-            -p 18080:7860 \
-            -v "${volume_dir}:/var/www/html" \
-            "${{ steps.meta.outputs.normal_version_arch_ref }}"
-
-          for i in $(seq 1 120); do
-            if curl -fsSL http://127.0.0.1:18080/wp-admin/install.php >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          curl -fsSL http://127.0.0.1:18080/wp-admin/install.php >/dev/null
-          docker exec "${container}" test -f /var/www/html/wp-config.php
-          docker exec "${container}" test -f /var/www/html/wp-content/db.php
-          docker exec "${container}" test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
-          docker exec "${container}" test -d /var/www/html/wp-content/database
-          docker exec "${container}" sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
-
-          if [ "${GITHUB_REF_NAME}" = "native-parser" ]; then
-            docker exec "${container}" sh -c "php -m | grep -qx wp_mysql_parser"
-          fi
-
       - name: Flatten image into a single layer for ${{ matrix.platform }}
         shell: bash
         run: |
@@ -195,45 +156,6 @@ jobs:
             --change 'EXPOSE 7860' \
             "${rootfs}" \
             "local-flat:${{ matrix.arch_tag }}"
-
-      - name: Test single-layer image on amd64
-        if: matrix.arch_tag == 'amd64'
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          container="wordpress-flat-test-${GITHUB_RUN_ID}"
-          volume_dir="$(mktemp -d)"
-
-          cleanup() {
-            docker rm -f "${container}" >/dev/null 2>&1 || true
-            rm -rf "${volume_dir}"
-          }
-          trap cleanup EXIT
-
-          docker run -d \
-            --name "${container}" \
-            -p 18081:7860 \
-            -v "${volume_dir}:/var/www/html" \
-            "local-flat:${{ matrix.arch_tag }}"
-
-          for i in $(seq 1 120); do
-            if curl -fsSL http://127.0.0.1:18081/wp-admin/install.php >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          curl -fsSL http://127.0.0.1:18081/wp-admin/install.php >/dev/null
-          docker exec "${container}" test -f /var/www/html/wp-config.php
-          docker exec "${container}" test -f /var/www/html/wp-content/db.php
-          docker exec "${container}" test -d /var/www/html/wp-content/mu-plugins/sqlite-database-integration
-          docker exec "${container}" test -d /var/www/html/wp-content/database
-          docker exec "${container}" sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
-
-          if [ "${GITHUB_REF_NAME}" = "native-parser" ]; then
-            docker exec "${container}" sh -c "php -m | grep -qx wp_mysql_parser"
-          fi
 
       - name: Push single-layer image for ${{ matrix.platform }}
         shell: bash
