@@ -24,6 +24,8 @@ RUN set -eux; \
     unzip -q sqlite-database-integration.zip; \
     plugin_source_dir="sqlite-database-integration"; \
     test -f "${plugin_source_dir}/db.copy"; \
+    test -f "${WP_PREPARE_DIR}/wp-config-docker.php"; \
+    cp "${WP_PREPARE_DIR}/wp-config-docker.php" "${WP_PREPARE_DIR}/wp-config.php"; \
     mkdir -p "${WP_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration"; \
     cp -r "${plugin_source_dir}/." "${WP_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration/"; \
     rm -rf "${plugin_source_dir}" sqlite-database-integration.zip; \
