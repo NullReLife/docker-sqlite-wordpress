@@ -3,9 +3,8 @@ FROM ${WORDPRESS_IMAGE}
 LABEL org.opencontainers.image.authors="soulteary@gmail.com"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-ENV WORDPRESS_PREPARE_DIR=/usr/src/wordpress
+ENV WP_PREPARE_DIR=/usr/src/wordpress
 ARG WORDPRESS_HTTP_PORT=7860
-ENV WORDPRESS_HTTP_PORT=${WORDPRESS_HTTP_PORT}
 
 RUN set -eux; \
     apt-get update; \
@@ -25,13 +24,13 @@ RUN set -eux; \
     unzip -q sqlite-database-integration.zip; \
     plugin_source_dir="sqlite-database-integration"; \
     test -f "${plugin_source_dir}/db.copy"; \
-    mkdir -p "${WORDPRESS_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration"; \
-    cp -r "${plugin_source_dir}/." "${WORDPRESS_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration/"; \
+    mkdir -p "${WP_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration"; \
+    cp -r "${plugin_source_dir}/." "${WP_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration/"; \
     rm -rf "${plugin_source_dir}" sqlite-database-integration.zip; \
-    mv "${WORDPRESS_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration/db.copy" "${WORDPRESS_PREPARE_DIR}/wp-content/db.php"; \
-    sed -i 's#{SQLITE_IMPLEMENTATION_FOLDER_PATH}#/var/www/html/wp-content/mu-plugins/sqlite-database-integration#' "${WORDPRESS_PREPARE_DIR}/wp-content/db.php"; \
-    sed -i 's#{SQLITE_PLUGIN}#sqlite-database-integration/load.php#' "${WORDPRESS_PREPARE_DIR}/wp-content/db.php"; \
-    mkdir -p "${WORDPRESS_PREPARE_DIR}/wp-content/database"; \
-    touch "${WORDPRESS_PREPARE_DIR}/wp-content/database/.ht.sqlite"; \
-    chown -R www-data:www-data "${WORDPRESS_PREPARE_DIR}/wp-content/database"; \
-    chmod 640 "${WORDPRESS_PREPARE_DIR}/wp-content/database/.ht.sqlite"
+    mv "${WP_PREPARE_DIR}/wp-content/mu-plugins/sqlite-database-integration/db.copy" "${WP_PREPARE_DIR}/wp-content/db.php"; \
+    sed -i 's#{SQLITE_IMPLEMENTATION_FOLDER_PATH}#/var/www/html/wp-content/mu-plugins/sqlite-database-integration#' "${WP_PREPARE_DIR}/wp-content/db.php"; \
+    sed -i 's#{SQLITE_PLUGIN}#sqlite-database-integration/load.php#' "${WP_PREPARE_DIR}/wp-content/db.php"; \
+    mkdir -p "${WP_PREPARE_DIR}/wp-content/database"; \
+    touch "${WP_PREPARE_DIR}/wp-content/database/.ht.sqlite"; \
+    chown -R www-data:www-data "${WP_PREPARE_DIR}/wp-content/database"; \
+    chmod 640 "${WP_PREPARE_DIR}/wp-content/database/.ht.sqlite"
