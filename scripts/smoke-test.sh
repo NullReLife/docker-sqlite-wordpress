@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE_NAME="sqlite-wordpress-smoke:local"
 CONTAINER_NAME="sqlite-wordpress-smoke-test"
 HOST_PORT="18080"
-CONTAINER_PORT="80"
+CONTAINER_PORT="7860"
 TEST_VOLUME="$(mktemp -d)"
 
 cleanup() {
@@ -19,6 +19,7 @@ cd "${ROOT_DIR}"
 docker build \
   --build-arg WORDPRESS_IMAGE=wordpress:7.0.0-php8.5-apache \
   --build-arg SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23 \
+  --build-arg WORDPRESS_HTTP_PORT="${CONTAINER_PORT}" \
   -t "${IMAGE_NAME}" \
   .
 
@@ -45,4 +46,4 @@ docker exec "${CONTAINER_NAME}" test -d /var/www/html/wp-content/database
 
 docker exec "${CONTAINER_NAME}" sh -c "php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'"
 
-echo "Smoke test passed."
+echo "Self-check passed."
