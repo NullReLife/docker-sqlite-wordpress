@@ -5,6 +5,12 @@ LABEL org.opencontainers.image.authors="soulteary@gmail.com"
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV WORDPRESS_PREPARE_DIR=/usr/src/wordpress
 
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends libsqlite3-dev; \
+    docker-php-ext-install pdo_sqlite sqlite3; \
+    rm -rf /var/lib/apt/lists/*
+
 # plugin: https://github.com/WordPress/sqlite-database-integration
 ARG SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23
 # details: https://soulteary.com/2024/04/21/wordpress-sqlite-docker-image-packaging-details.html
