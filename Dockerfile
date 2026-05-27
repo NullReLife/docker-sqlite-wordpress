@@ -28,13 +28,11 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
-    curl -fsSL -o sqlite-database-integration.tar.gz "https://github.com/WordPress/sqlite-database-integration/archive/${SQLITE_DATABASE_INTEGRATION_COMMIT}.tar.gz"; \
-    tar -xzf sqlite-database-integration.tar.gz; \
-    extracted_dir="$(find . -maxdepth 1 -type d -name 'sqlite-database-integration-*' -print -quit)"; \
-    test -d "${extracted_dir}/packages/php-ext-wp-mysql-parser"; \
-    test -f "${extracted_dir}/packages/plugin-sqlite-database-integration/db.copy"; \
-    mv "${extracted_dir}" "${SQLITE_DATABASE_INTEGRATION_SOURCE_DIR}"; \
-    rm -f sqlite-database-integration.tar.gz; \
+    git clone --filter=blob:none --no-checkout https://github.com/WordPress/sqlite-database-integration.git "${SQLITE_DATABASE_INTEGRATION_SOURCE_DIR}"; \
+    git -C "${SQLITE_DATABASE_INTEGRATION_SOURCE_DIR}" checkout --detach "${SQLITE_DATABASE_INTEGRATION_COMMIT}"; \
+    test -d "${SQLITE_DATABASE_INTEGRATION_SOURCE_DIR}/packages/php-ext-wp-mysql-parser"; \
+    test -f "${SQLITE_DATABASE_INTEGRATION_SOURCE_DIR}/packages/plugin-sqlite-database-integration/db.copy"; \
+    rm -rf "${SQLITE_DATABASE_INTEGRATION_SOURCE_DIR}/.git"; \
     export LIBCLANG_PATH="$(dirname "$(find /usr/lib -name 'libclang.so*' -print -quit)")"; \
     export PHP_CONFIG="$(command -v php-config)"; \
     cargo build --release --manifest-path "${SQLITE_DATABASE_INTEGRATION_SOURCE_DIR}/packages/php-ext-wp-mysql-parser/Cargo.toml"; \
