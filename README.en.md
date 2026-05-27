@@ -22,7 +22,7 @@ If the native parser build fails, it does not affect the `main` branch.
 - WordPress: 7.0.0
 - PHP: 8.5
 - Base image: `wordpress:7.0.0-php8.5-apache`
-- SQLite Database Integration source commit: `c43113d9e267462a12ecd2b04a73c3b62e5d2c7b`
+- SQLite Database Integration source commit: `e5513936c800f14b6795e7fce71505afad331b11`
 - Native extension: `wp_mysql_parser`
 - Container listen port: 7860
 
@@ -35,10 +35,10 @@ The WordPress.org `sqlite-database-integration` 2.2.23 release package is suitab
 Therefore, the `native-parser` branch uses this fixed upstream source commit:
 
 ```text
-c43113d9e267462a12ecd2b04a73c3b62e5d2c7b
+e5513936c800f14b6795e7fce71505afad331b11
 ```
 
-That commit introduced the optional Rust-based native MySQL parser extension. Its source lives in:
+That commit includes the optional Rust-based native MySQL parser extension. Its source lives in:
 
 ```text
 packages/php-ext-wp-mysql-parser
@@ -51,7 +51,7 @@ Build the native-parser image locally:
 ```bash
 docker build \
   --build-arg WORDPRESS_IMAGE=wordpress:7.0.0-php8.5-apache \
-  --build-arg SQLITE_DATABASE_INTEGRATION_COMMIT=c43113d9e267462a12ecd2b04a73c3b62e5d2c7b \
+  --build-arg SQLITE_DATABASE_INTEGRATION_COMMIT=e5513936c800f14b6795e7fce71505afad331b11 \
   --build-arg WORDPRESS_HTTP_PORT=7860 \
   -t sqlite-wordpress:7.0.0-php8.5-apache-native-parser \
   .
@@ -151,7 +151,7 @@ services:
       context: .
       args:
         WORDPRESS_IMAGE: wordpress:7.0.0-php8.5-apache
-        SQLITE_DATABASE_INTEGRATION_COMMIT: c43113d9e267462a12ecd2b04a73c3b62e5d2c7b
+        SQLITE_DATABASE_INTEGRATION_COMMIT: e5513936c800f14b6795e7fce71505afad331b11
         WORDPRESS_HTTP_PORT: 7860
     restart: always
     ports:
