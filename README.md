@@ -22,7 +22,7 @@
 - WordPress: 7.0.0
 - PHP: 8.5
 - 基础镜像：`wordpress:7.0.0-php8.5-apache`
-- SQLite Database Integration 源码 commit：`c43113d9e267462a12ecd2b04a73c3b62e5d2c7b`
+- SQLite Database Integration 源码 commit：`e5513936c800f14b6795e7fce71505afad331b11`
 - 原生扩展：`wp_mysql_parser`
 - 容器监听端口：7860
 
@@ -35,10 +35,10 @@
 因此，`native-parser` 分支使用固定的上游源码 commit：
 
 ```text
-c43113d9e267462a12ecd2b04a73c3b62e5d2c7b
+e5513936c800f14b6795e7fce71505afad331b11
 ```
 
-这个 commit 引入了可选的 Rust 原生 MySQL parser 扩展，源码位于：
+这个 commit 包含可选的 Rust 原生 MySQL parser 扩展，源码位于：
 
 ```text
 packages/php-ext-wp-mysql-parser
@@ -51,7 +51,7 @@ packages/php-ext-wp-mysql-parser
 ```bash
 docker build \
   --build-arg WORDPRESS_IMAGE=wordpress:7.0.0-php8.5-apache \
-  --build-arg SQLITE_DATABASE_INTEGRATION_COMMIT=c43113d9e267462a12ecd2b04a73c3b62e5d2c7b \
+  --build-arg SQLITE_DATABASE_INTEGRATION_COMMIT=e5513936c800f14b6795e7fce71505afad331b11 \
   --build-arg WORDPRESS_HTTP_PORT=7860 \
   -t sqlite-wordpress:7.0.0-php8.5-apache-native-parser \
   .
@@ -151,7 +151,7 @@ services:
       context: .
       args:
         WORDPRESS_IMAGE: wordpress:7.0.0-php8.5-apache
-        SQLITE_DATABASE_INTEGRATION_COMMIT: c43113d9e267462a12ecd2b04a73c3b62e5d2c7b
+        SQLITE_DATABASE_INTEGRATION_COMMIT: e5513936c800f14b6795e7fce71505afad331b11
         WORDPRESS_HTTP_PORT: 7860
     restart: always
     ports:
