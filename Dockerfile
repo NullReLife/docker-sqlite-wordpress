@@ -47,6 +47,7 @@ ARG WORDPRESS_HTTP_PORT=7860
 ARG SQLITE_DATABASE_INTEGRATION_VERSION=2.2.23
 
 COPY --from=builder /usr/src/sqlite-database-integration/packages/php-ext-wp-mysql-parser/target/release/libwp_mysql_parser.so /tmp/libwp_mysql_parser.so
+COPY scripts/docker-sqlite-entrypoint.sh /usr/local/bin/docker-sqlite-entrypoint.sh
 
 RUN set -eux; \
     apt-get update; \
@@ -58,6 +59,7 @@ RUN set -eux; \
     cp /tmp/libwp_mysql_parser.so "${extension_dir}/wp_mysql_parser.so"; \
     echo 'extension=wp_mysql_parser.so' > /usr/local/etc/php/conf.d/docker-php-ext-wp-mysql-parser.ini; \
     php -m | grep -qx wp_mysql_parser; \
+    chmod +x /usr/local/bin/docker-sqlite-entrypoint.sh; \
     curl -fsSL -o sqlite-database-integration.zip "https://downloads.wordpress.org/plugin/sqlite-database-integration.${SQLITE_DATABASE_INTEGRATION_VERSION}.zip"; \
     unzip -q sqlite-database-integration.zip; \
     plugin_source_dir="sqlite-database-integration"; \
@@ -78,3 +80,5 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 EXPOSE ${WORDPRESS_HTTP_PORT}
+ENTRYPOINT ["docker-sqlite-entrypoint.sh"]
+CMD ["apache2-foreground"]
