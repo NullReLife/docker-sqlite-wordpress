@@ -6,12 +6,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV WP_PREPARE_DIR=/usr/src/wordpress
 ARG WORDPRESS_HTTP_PORT=7860
 
+COPY scripts/docker-sqlite-entrypoint.sh /usr/local/bin/docker-sqlite-entrypoint.sh
+
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends unzip; \
     sed -ri 's!^Listen 80$!Listen '"${WORDPRESS_HTTP_PORT}"'!' /etc/apache2/ports.conf; \
     sed -ri "s!<VirtualHost \\*:80>!<VirtualHost *:${WORDPRESS_HTTP_PORT}>!" /etc/apache2/sites-available/000-default.conf; \
     php -m | grep -Eiq '^(sqlite3|pdo_sqlite)$'; \
+    chmod +x /usr/local/bin/docker-sqlite-entrypoint.sh; \
     rm -rf /var/lib/apt/lists/*
 
 EXPOSE ${WORDPRESS_HTTP_PORT}
@@ -36,3 +39,6 @@ RUN set -eux; \
     touch "${WP_PREPARE_DIR}/wp-content/database/.ht.sqlite"; \
     chown -R www-data:www-data "${WP_PREPARE_DIR}/wp-content/database"; \
     chmod 640 "${WP_PREPARE_DIR}/wp-content/database/.ht.sqlite"
+
+ENTRYPOINT ["docker-sqlite-entrypoint.sh"]
+CMD ["apache2-foreground"]
