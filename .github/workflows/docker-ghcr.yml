@@ -31,7 +31,6 @@ jobs:
     name: Build ${{ matrix.platform }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    continue-on-error: ${{ matrix.experimental }}
 
     strategy:
       fail-fast: false
@@ -39,13 +38,8 @@ jobs:
         include:
           - platform: linux/amd64
             arch_tag: amd64
-            experimental: false
           - platform: linux/arm64
             arch_tag: arm64
-            experimental: false
-          - platform: linux/arm/v7
-            arch_tag: armv7
-            experimental: true
 
     steps:
       - name: Checkout
@@ -54,7 +48,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: all
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -151,7 +145,7 @@ jobs:
             --change 'ENV APACHE_CONFDIR=/etc/apache2' \
             --change 'ENV APACHE_ENVVARS=/etc/apache2/envvars' \
             --change 'WORKDIR /var/www/html' \
-            --change 'ENTRYPOINT ["docker-entrypoint.sh"]' \
+            --change 'ENTRYPOINT ["docker-sqlite-entrypoint.sh"]' \
             --change 'CMD ["apache2-foreground"]' \
             --change 'EXPOSE 7860' \
             "${rootfs}" \
@@ -225,12 +219,13 @@ jobs:
           collect_refs() {
             local base_tag="$1"
             local refs=()
-            for arch in amd64 arm64 armv7; do
+            for arch in amd64 arm64; do
               local ref="${image}:${base_tag}-${arch}"
               if docker buildx imagetools inspect "${ref}" >/dev/null 2>&1; then
                 refs+=("${ref}")
               else
-                echo "Skip missing optional image: ${ref}" >&2
+                echo "Missing required image: ${ref}" >&2
+                exit 1
               fi
             done
             printf '%s\n' "${refs[@]}"
@@ -281,5 +276,5 @@ jobs:
             ${image}:${channel_tag}-flat
 
           Per-architecture tags are also available with suffixes:
-            -amd64, -arm64, -armv7
+            -amd64, -arm64
           EOF
